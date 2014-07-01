@@ -10,35 +10,25 @@ var Links = require('./app/collections/links');
 var Link = require('./app/models/link');
 var Click = require('./app/models/click');
 var passport = require('passport');
+var config = require('./oauth.js');
 var app = express();
 var GitHubStrategy = require('passport-github').Strategy;
-
-var GITHUB_CLIENT_ID = 'e5f1f43ef3e0e3c76a0c';
-var GITHUB_CLIENT_SECRET = '0adea22d6b83b69cc0ed6554cf687ac636a1b61e';
 
 passport.serializeUser(function(user, done) {
   done(null, user);
 });
 
-passport.deserializeUser(function(id, done) {
-  User.findById(id, function(err, user) {
-    done(err, user);
-  });
+passport.deserializeUser(function(obj, done) {
+  done(null, obj);
 });
 
 passport.use(new GitHubStrategy({
-    clientID: GITHUB_CLIENT_ID,
-    clientSecret: GITHUB_CLIENT_SECRET,
-    callbackURL: 'http://127.0.0.1:8080/authorized'
+    clientID: config.ids.github.clientID,
+    clientSecret: config.ids.github.clientSecret,
+    callbackURL: config.ids.github.callbackURL
   },
   function(accessToken, refreshToken, profile, done) {
-    // asynchronous verification, for effect...
     process.nextTick(function () {
-
-      // To keep the example simple, the user's GitHub profile is returned to
-      // represent the logged-in user.  In a typical application, you would want
-      // to associate the GitHub account with a user record in your database,
-      // and return that user instead.
       return done(null, profile);
     });
   }
@@ -52,18 +42,29 @@ app.configure(function() {
   app.use(express.cookieParser('secretsauce'));
   app.use(express.session());
   app.use(express.static(__dirname + '/public'));
+  app.use(passport.initialize());
+  app.use(passport.session());
 });
 
-app.get('/', function(req, res) {
-
-  if (!req.session.user) {
-    res.redirect('login');
-  } else {
-    res.render('index');
+var ensureAuthenticated = function(req, res, next) {
+  if (req.isAuthenticated()) {
+    return next();
   }
+  res.render('login');
+};
+
+app.get('/', ensureAuthenticated, function(req, res) {
+  res.render('index');
 });
 
-app.get('/auth/github')
+app.get('/auth/github', passport.authenticate('github'), function(req,res) {});
+
+app.get('/authorized',
+  passport.authenticate('github', { failureRedirect: '/login' }),
+  function(req, res) {
+    res.redirect('/');
+  }
+);
 
 app.get('/create', function(req, res) {
   if (!req.session.user) {
@@ -115,58 +116,58 @@ app.post('/links', function(req, res) {
 /************************************************************/
 // Write your authentication routes here
 /************************************************************/
-app.get('/signup', function(req, res) {
-  res.render('signup');
-});
+// app.get('/signup', function(req, res) {
+//   res.render('signup');
+// });
 
-app.post('/signup', function(req, res) {
-  var username = req.body.username;
-  var password = req.body.password;
+// app.post('/signup', function(req, res) {
+//   var username = req.body.username;
+//   var password = req.body.password;
 
-  var user = new User({
-    username: username,
-    password: password
-  }, null, function(context){
-    context.save().then(function(newUser) {
-      Users.add(newUser);
-      res.redirect('index');
-    });
-  });
+//   var user = new User({
+//     username: username,
+//     password: password
+//   }, null, function(context){
+//     context.save().then(function(newUser) {
+//       Users.add(newUser);
+//       res.redirect('index');
+//     });
+//   });
 
 
-});
+// });
 
-app.get('/login', function(req, res) {
-  if (req.session.user) {
-    res.redirect('index');
-  } else {
-    res.render('login');
-  }
-});
+// app.get('/login', function(req, res) {
+//   if (req.session.user) {
+//     res.redirect('index');
+//   } else {
+//     res.render('login');
+//   }
+// });
 
-app.post('/login', function(req, res) {
-  var username = req.body.username;
-  var password = req.body.password;
+// app.post('/login', function(req, res) {
+//   var username = req.body.username;
+//   var password = req.body.password;
 
-  Users.query(function(users) {
-    users.where('username', '=', username);
-  }).fetch().then(function(user) {
-    if (user.length === 1) {
-      bcrypt.compare(password, user.models[0].attributes.password, function(err, response) {
-        if (response === false)  {
-          throw err;
-        } else {
-          req.session.regenerate(function() {
-            req.session.user = username;
-            res.redirect('index');
-          });
-        }
-      });
-    } else {
-      res.redirect('login');
-    }
-  });
-});
+//   Users.query(function(users) {
+//     users.where('username', '=', username);
+//   }).fetch().then(function(user) {
+//     if (user.length === 1) {
+//       bcrypt.compare(password, user.models[0].attributes.password, function(err, response) {
+//         if (response === false)  {
+//           throw err;
+//         } else {
+//           req.session.regenerate(function() {
+//             req.session.user = username;
+//             res.redirect('index');
+//           });
+//         }
+//       });
+//     } else {
+//       res.redirect('login');
+//     }
+//   });
+// });
 
 
 app.get('/users', function(req, res) {
@@ -176,9 +177,8 @@ app.get('/users', function(req, res) {
 });
 
 app.get('/logout', function(req, res) {
-  req.session.destroy(function() {
-    res.redirect('index');
-  });
+  req.logout();
+  res.render('login');
 });
 
 
