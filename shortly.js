@@ -9,8 +9,40 @@ var User = require('./app/models/user');
 var Links = require('./app/collections/links');
 var Link = require('./app/models/link');
 var Click = require('./app/models/click');
-
+var passport = require('passport');
 var app = express();
+var GitHubStrategy = require('passport-github').Strategy;
+
+var GITHUB_CLIENT_ID = 'e5f1f43ef3e0e3c76a0c';
+var GITHUB_CLIENT_SECRET = '0adea22d6b83b69cc0ed6554cf687ac636a1b61e';
+
+passport.serializeUser(function(user, done) {
+  done(null, user);
+});
+
+passport.deserializeUser(function(id, done) {
+  User.findById(id, function(err, user) {
+    done(err, user);
+  });
+});
+
+passport.use(new GitHubStrategy({
+    clientID: GITHUB_CLIENT_ID,
+    clientSecret: GITHUB_CLIENT_SECRET,
+    callbackURL: 'http://127.0.0.1:8080/authorized'
+  },
+  function(accessToken, refreshToken, profile, done) {
+    // asynchronous verification, for effect...
+    process.nextTick(function () {
+
+      // To keep the example simple, the user's GitHub profile is returned to
+      // represent the logged-in user.  In a typical application, you would want
+      // to associate the GitHub account with a user record in your database,
+      // and return that user instead.
+      return done(null, profile);
+    });
+  }
+));
 
 app.configure(function() {
   app.set('views', __dirname + '/views');
@@ -30,6 +62,8 @@ app.get('/', function(req, res) {
     res.render('index');
   }
 });
+
+app.get('/auth/github')
 
 app.get('/create', function(req, res) {
   if (!req.session.user) {
