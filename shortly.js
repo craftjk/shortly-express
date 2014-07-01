@@ -1,6 +1,7 @@
 var express = require('express');
 var util = require('./lib/utility');
 var partials = require('express-partials');
+var bcrypt = require('bcrypt-nodejs');
 
 var db = require('./app/config');
 var Users = require('./app/collections/users');
@@ -15,22 +16,33 @@ app.configure(function() {
   app.set('views', __dirname + '/views');
   app.set('view engine', 'ejs');
   app.use(partials());
-  app.use(express.bodyParser())
+  app.use(express.bodyParser());
+  app.use(express.cookieParser('secretsauce'));
+  app.use(express.session());
   app.use(express.static(__dirname + '/public'));
 });
 
 app.get('/', function(req, res) {
-  res.render('index');
+
+  if (!req.session.user) {
+    res.redirect('login');
+  } else {
+    res.render('index');
+  }
 });
 
 app.get('/create', function(req, res) {
-  res.render('index');
+  if (!req.session.user) {
+    res.redirect('login');
+  } else {
+    res.render('index');
+  }
 });
 
 app.get('/links', function(req, res) {
   Links.reset().fetch().then(function(links) {
     res.send(200, links.models);
-  })
+  });
 });
 
 app.post('/links', function(req, res) {
@@ -69,6 +81,72 @@ app.post('/links', function(req, res) {
 /************************************************************/
 // Write your authentication routes here
 /************************************************************/
+app.get('/signup', function(req, res) {
+  res.render('signup');
+});
+
+app.post('/signup', function(req, res) {
+  var username = req.body.username;
+  var password = req.body.password;
+
+  var user = new User({
+    username: username,
+    password: password
+  }, null, function(context){
+    context.save().then(function(newUser) {
+      Users.add(newUser);
+      res.redirect('index');
+    });
+  });
+
+
+});
+
+app.get('/login', function(req, res) {
+  if (req.session.user) {
+    res.redirect('index');
+  } else {
+    res.render('login');
+  }
+});
+
+app.post('/login', function(req, res) {
+  var username = req.body.username;
+  var password = req.body.password;
+
+  Users.query(function(users) {
+    users.where('username', '=', username);
+  }).fetch().then(function(user) {
+    if (user.length === 1) {
+      bcrypt.compare(password, user.models[0].attributes.password, function(err, response) {
+        if (response === false)  {
+          throw err;
+        } else {
+          req.session.regenerate(function() {
+            req.session.user = username;
+            res.redirect('index');
+          });
+        }
+      });
+    } else {
+      res.redirect('login');
+    }
+  });
+});
+
+
+app.get('/users', function(req, res) {
+  Users.reset().fetch().then(function(users) {
+    res.send(200, users.models);
+  });
+});
+
+app.get('/logout', function(req, res) {
+  req.session.destroy(function() {
+    res.redirect('index');
+  });
+});
+
 
 
 
